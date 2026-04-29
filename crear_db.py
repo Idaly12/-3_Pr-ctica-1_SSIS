@@ -4,76 +4,87 @@ import os
 def ejecutar_reingenieria():
     db_name = 'baseDedatosIng.db'
     
-    # 1. Limpieza preventiva: Si el archivo existe, lo borramos para crearlo de cero
+    # 1. Limpieza preventiva
     if os.path.exists(db_name):
         os.remove(db_name)
-        print(f"--- Archivo anterior '{db_name}' eliminado para limpieza ---")
+        print(f"--- Archivo anterior '{db_name}' eliminado ---")
 
-    # 2. Conexión e inicialización
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    print("--- Iniciando creación de tablas en 3FN ---")
+    # Habilitar soporte para llaves foráneas en SQLite
+    cursor.execute("PRAGMA foreign_keys = ON")
+    
+    print("--- Creando Base de Datos Normalizada (5 Tablas - 3FN) ---")
 
-    # --- TABLA CARRERAS (Basada en CARRERAS.DBF) ---
-    cursor.execute('''
-        CREATE TABLE carreras (
-            clave TEXT PRIMARY KEY,
-            nombre TEXT NOT NULL
-        )
-    ''')
-    # Insertamos datos reales del archivo[cite: 3]
-    carreras_datos = [
+    # TABLA 1: CARRERAS (Catálogo Maestro)[cite: 3]
+    cursor.execute('''CREATE TABLE carreras (
+                        clave TEXT PRIMARY KEY,
+                        nombre TEXT NOT NULL)''')
+
+    # TABLA 2: MATERIAS (Catálogo Maestro)[cite: 4]
+    cursor.execute('''CREATE TABLE materias (
+                        clave TEXT PRIMARY KEY,
+                        descri TEXT NOT NULL)''')
+
+    # TABLA 3: VERSIONES_PLAN (Encabezados de Planes como 'A', 'B')[cite: 2, 6]
+    cursor.execute('''CREATE TABLE versiones_plan (
+                        clave_plan TEXT PRIMARY KEY,
+                        descripcion TEXT)''')
+
+    # TABLA 4: ESTRUCTURA_PLAN (Une Carrera, Materia y Versión)
+    # Aquí eliminamos los campos REQUI1, REQUI2... para cumplir 3FN
+    cursor.execute('''CREATE TABLE estructura_plan (
+                        id_registro INTEGER PRIMARY KEY AUTOINCREMENT,
+                        clave_plan TEXT NOT NULL,
+                        carrera_id TEXT NOT NULL,
+                        materia_id TEXT NOT NULL,
+                        semestre TEXT CHECK(semestre BETWEEN '01' AND '10'),
+                        fecalt TEXT,
+                        FOREIGN KEY (clave_plan) REFERENCES versiones_plan(clave_plan),
+                        FOREIGN KEY (carrera_id) REFERENCES carreras(clave),
+                        FOREIGN KEY (materia_id) REFERENCES materias(clave))''')
+
+    # TABLA 5: PRERREQUISITOS (Normalización de los campos REQUI del archivo 310.txt)
+    # Permite que una materia tenga múltiples requisitos de forma escalable
+    cursor.execute('''CREATE TABLE prerrequisitos (
+                        id_registro_plan INTEGER NOT NULL,
+                        materia_req_id TEXT NOT NULL,
+                        FOREIGN KEY (id_registro_plan) REFERENCES estructura_plan(id_registro),
+                        FOREIGN KEY (materia_req_id) REFERENCES materias(clave),
+                        PRIMARY KEY (id_registro_plan, materia_req_id))''')
+
+    # --- INSERCIÓN DE DATOS ---
+    
+    # Datos de Carreras[cite: 3]
+    cursor.executemany("INSERT INTO carreras VALUES (?,?)", [
         ('05', 'ING. EN SIST COMPUTACIONALES EN SOFTWARE'),
         ('07', 'ING. EN SIST COMPUTACIONALES EN HARDWARE')
-    ]
-    cursor.executemany("INSERT INTO carreras VALUES (?,?)", carreras_datos)
+    ])
 
-    # --- TABLA MATERIAS (Basada en MATERIAS.DBF) ---
-    cursor.execute('''
-        CREATE TABLE materias (
-            clave TEXT PRIMARY KEY,
-            descri TEXT NOT NULL
-        )
-    ''')
-    # Insertamos datos reales del archivo[cite: 4]
-    materias_datos = [
+    # Datos de Materias[cite: 4]
+    cursor.executemany("INSERT INTO materias VALUES (?,?)", [
         ('101', 'ALGEBRA SUPERIOR'),
         ('102', 'MATEMATICAS I'),
-        ('103', 'FISICA I'),
-        ('140', 'INTRODUCCION A LA COMPUTACION')
-    ]
-    cursor.executemany("INSERT INTO materias VALUES (?,?)", materias_datos)
+        ('140', 'INTRODUCCION A LA COMPUTACION'),
+        ('201', 'MATEMATICAS II')
+    ])
 
-    # --- TABLA PLANES (Reingeniería de ESC310 - 3FN) ---
-    # Nota: Separamos la lógica de requisitos para cumplir con la normalización
-    cursor.execute('''
-        CREATE TABLE planes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            clave_plan TEXT NOT NULL,
-            carrera_id TEXT NOT NULL,
-            materia_id TEXT NOT NULL,
-            semestre TEXT CHECK(semestre BETWEEN '01' AND '10'),
-            fecalt TEXT,
-            requi1 TEXT,
-            FOREIGN KEY (carrera_id) REFERENCES carreras(clave),
-            FOREIGN KEY (materia_id) REFERENCES materias(clave)
-        )
-    ''')
+    # Versiones de Plan[cite: 1, 5]
+    cursor.execute("INSERT INTO versiones_plan VALUES (?,?)", ('A', 'Plan de Estudios 1991'))
+
+    # Estructura del Plan[cite: 5]
+    # Insertamos la relación Carrera-Materia-Plan
+    cursor.execute("INSERT INTO estructura_plan (clave_plan, carrera_id, materia_id, semestre, fecalt) VALUES (?,?,?,?,?)",
+                   ('A', '05', '201', '02', '1982-06-28'))
     
-    # Insertamos algunos registros de ejemplo basados en PLANES.DBF[cite: 5]
-    planes_datos = [
-        ('A', '01', '101', '01', '1982-06-24', None),
-        ('A', '01', '102', '01', '1982-06-25', None),
-        ('A', '01', '201', '02', '1982-06-28', '102')
-    ]
-    cursor.executemany('''
-        INSERT INTO planes (clave_plan, carrera_id, materia_id, semestre, fecalt, requi1) 
-        VALUES (?,?,?,?,?,?)
-    ''', planes_datos)
+    ultimo_id = cursor.lastrowid # Obtenemos el ID generado para asignar requisitos
+
+    # Prerrequisitos (Normalización del antiguo REQUI1 de 'MATEMATICAS II')[cite: 1, 5]
+    cursor.execute("INSERT INTO prerrequisitos VALUES (?,?)", (ultimo_id, '102'))
 
     conn.commit()
     conn.close()
-    print(f"--- Proceso terminado: '{db_name}' está lista para revisarse ---")
+    print(f"--- Proceso terminado: '{db_name}' creada con éxito en 3FN ---")
 
 if __name__ == "__main__":
     ejecutar_reingenieria()
