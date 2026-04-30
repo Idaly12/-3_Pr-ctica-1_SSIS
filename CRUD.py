@@ -30,18 +30,18 @@ class DatabaseManager:
         """
         return self._ejecutar_query(query, fetch=True)
 
-    def guardar_registro(self, plan, carrera, materia, semestre, falt, fbaj, requisitos_ids=None, rid=None):
+    def guardar_registro(self, plan, carrera, materia, semestre, falt, fecbaj, requisitos_ids=None, rid=None):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         if rid:
             query = "UPDATE estructura_plan SET clave_plan=?, carrera_id=?, materia_id=?, semestre=?, fecalt=?, fecbaj=? WHERE id_registro=?"
-            cursor.execute(query, (plan, carrera, materia, semestre, falt, fbaj, rid))
+            cursor.execute(query, (plan, carrera, materia, semestre, falt, fecbaj, rid))
             cursor.execute("DELETE FROM prerrequisitos WHERE id_registro_plan = ?", (rid,))
             id_plan = rid
         else:
-            query = "INSERT INTO estructura_plan (clave_plan, carrera_id, materia_id, semestre, fecalt, fbaj) VALUES (?,?,?,?,?,?)"
-            cursor.execute(query, (plan, carrera, materia, semestre, falt, fbaj))
+            query = "INSERT INTO estructura_plan (clave_plan, carrera_id, materia_id, semestre, fecalt, fecbaj) VALUES (?,?,?,?,?,?)"
+            cursor.execute(query, (plan, carrera, materia, semestre, falt, fecbaj))
             id_plan = cursor.lastrowid
 
         if requisitos_ids:
