@@ -7,10 +7,10 @@ def main(page: ft.Page):
     page.padding = 30
     page.theme_mode = ft.ThemeMode.LIGHT
     
-    # Esta columna contendrá físicamente los Checkboxes en la pantalla para la seriación
+    # Esta columna contendra físicamente los Checkboxes 
     lista_checks = ft.Column(scroll=ft.ScrollMode.AUTO, height=150)
 
-    # --- LÓGICA DE VALIDACIÓN Y MÁSCARA ---
+    # logica y validacion
     def formatear_fecha(e):
         # Filtra solo dígitos para aplicar la máscara
         v = "".join(filter(str.isdigit, e.control.value))
@@ -41,11 +41,19 @@ def main(page: ft.Page):
             v = v[:4] + "/" + v[4:6] + "/" + v[6:8]
         
         e.control.value = v
+        # Al escribir, se limpia el borde de error si lo tuviera
+        if e.control.border_color == ft.Colors.RED and len(v) > 0:
+            e.control.border_color = None
         page.update()
 
     def actualizar_prerrequisitos(e=None):
         # Desactiva la opción en los prerrequisitos que coincida con la materia seleccionada
         materia_seleccionada = dd_materia.value
+        
+        # Limpia el color de error si se seleccionó una materia válida
+        if materia_seleccionada and dd_materia.border_color == ft.Colors.RED:
+            dd_materia.border_color = None
+
         for check in lista_checks.controls:
             if materia_seleccionada and check.data == materia_seleccionada:
                 check.disabled = True
@@ -54,16 +62,22 @@ def main(page: ft.Page):
                 check.disabled = False
         page.update()
 
+    def limpiar_borde_error_dropdown(e):
+        # Función auxiliar para limpiar bordes rojos al seleccionar una opción en los demás dropdowns
+        if e.control.value and e.control.border_color == ft.Colors.RED:
+            e.control.border_color = None
+            page.update()
+
     # --- COMPONENTES ---
     txt_id = ft.Text(visible=False)
-    dd_plan = ft.Dropdown(label="Plan", expand=1)
-    dd_carrera = ft.Dropdown(label="Carrera", expand=3)
-    # Se actualiza la propiedad a on_select para las versiones recientes de Flet
+    dd_plan = ft.Dropdown(label="Plan", expand=1, on_select=limpiar_borde_error_dropdown)
+    dd_carrera = ft.Dropdown(label="Carrera", expand=3, on_select=limpiar_borde_error_dropdown)
     dd_materia = ft.Dropdown(label="Materia", expand=True, on_select=actualizar_prerrequisitos)
     dd_semestre = ft.Dropdown(
         label="Semestre",
         options=[ft.dropdown.Option(f"{i:02d}") for i in range(1, 11)],
-        width=160
+        width=160,
+        on_select=limpiar_borde_error_dropdown
     )
 
     txt_fecalt = ft.TextField(label="Fecha Alta (YYYY/MM/DD)", on_change=formatear_fecha, expand=1)
@@ -144,16 +158,36 @@ def main(page: ft.Page):
             for check in lista_checks.controls:
                 check.value = True if check.data in reqs else False
             
+            # Limpia los bordes rojos al seleccionar para editar
+            for campo in [dd_plan, dd_carrera, dd_materia, dd_semestre, txt_fecalt]:
+                campo.border_color = None
+            
             # Valida las restricciones de materia en los prerrequisitos
             actualizar_prerrequisitos()
 
     def guardar(e):
+        # Se definen los campos que son requeridos obligatoriamente
+        campos_requeridos = [dd_plan, dd_carrera, dd_materia, dd_semestre, txt_fecalt]
+        es_valido = True
+
+        # Validación visual: pintar de rojo si el valor está vacío
+        for campo in campos_requeridos:
+            if not campo.value or str(campo.value).strip() == "":
+                campo.border_color = ft.Colors.RED
+                es_valido = False
+            else:
+                campo.border_color = None
+
+        if not es_valido:
+            page.update()
+            return
+
         # Recolecta los IDs de las materias marcadas en la lista de seriación
         reqs_seleccionados = [
             check.data for check in lista_checks.controls if check.value == True
         ]
         
-        # Ejecuta la operación de guardado (Insert o Update) incluyendo requisitos
+        # Ejecuta la operacion de guardado (Insert o Update) incluyendo requisitos
         db.guardar_registro(
             dd_plan.value, dd_carrera.value, dd_materia.value, 
             dd_semestre.value, txt_fecalt.value, txt_fecbaj.value,
@@ -168,8 +202,14 @@ def main(page: ft.Page):
         txt_id.value = ""
         dd_plan.value = dd_carrera.value = dd_materia.value = dd_semestre.value = None
         txt_fecalt.value = txt_fecbaj.value = ""
+        
+        # colores de los bordes 
+        for campo in [dd_plan, dd_carrera, dd_materia, dd_semestre, txt_fecalt, txt_fecbaj]:
+            campo.border_color = None
+
         for check in lista_checks.controls:
             check.value = False
+        
         # Restablece el estado de los componentes bloqueados
         actualizar_prerrequisitos()
 
@@ -180,7 +220,7 @@ def main(page: ft.Page):
             limpiar()
             refrescar()
 
-    # --- DISEÑO ---
+    #diseño
     page.add(
         ft.Text("Administración de Planes de Estudio - Reingeniería", size=24, weight="bold"),
         ft.Column([
