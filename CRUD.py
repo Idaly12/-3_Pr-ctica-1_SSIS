@@ -21,8 +21,9 @@ class DatabaseManager:
         return planes, carreras, materias
 
     def leer_registros(self):
+        # Se cambia v.clave_plan por v.descripcion para mostrar el nombre completo en la tabla
         query = """
-            SELECT ep.id_registro, v.clave_plan, c.nombre, m.descri, ep.semestre, ep.fecalt, ep.fecbaj
+            SELECT ep.id_registro, v.descripcion, c.nombre, m.descri, ep.semestre, ep.fecalt, ep.fecbaj
             FROM estructura_plan ep
             JOIN versiones_plan v ON ep.clave_plan = v.clave_plan
             JOIN carreras c ON ep.carrera_id = c.clave
