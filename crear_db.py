@@ -4,7 +4,6 @@ import os
 def ejecutar_reingenieria():
     db_name = 'baseDedatosIng.db'
     
-    # IMPORTANTE: Borra el archivo viejo para que se cree con la nueva columna
     if os.path.exists(db_name):
         os.remove(db_name)
 
