@@ -43,8 +43,9 @@ def ejecutar_reingenieria():
         ('07', 'ING. EN SIST COMPUTACIONALES EN HARDWARE')])
 
     cursor.executemany("INSERT INTO materias VALUES (?,?)", [
-        ('101', 'ALGEBRA SUPERIOR'), ('102', 'MATEMATICAS I'),
-        ('140', 'INTRODUCCION A LA COMPUTACION'), ('201', 'MATEMATICAS II')])
+        ('101', 'ALGEBRA SUPERIOR'), ('202', 'AlGEBRA LINEAL'),
+        ('105', 'INTRODUCCION A LA COMPUTACION'), ('205', 'PROGRAMACION ORIENTADA A OBJETOS'),('301', 'ESTRUCTURA DE DATOS'),
+        ('401', 'ESTRUCTURA DE DATOS AVANZADA')])
 
     cursor.executemany("INSERT INTO versiones_plan VALUES (?,?)", [('A', 'Plan de Estudios 1991'), ('B', 'Plan de Estudios 2016')])
 
