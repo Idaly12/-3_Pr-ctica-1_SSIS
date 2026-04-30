@@ -6,9 +6,13 @@ def main(page: ft.Page):
     page.title = "Reingeniería - Practica 1"
     page.padding = 30
     page.theme_mode = ft.ThemeMode.LIGHT
+    
+    # Esta columna contendrá físicamente los Checkboxes en la pantalla para la seriación
+    lista_checks = ft.Column(scroll=ft.ScrollMode.AUTO, height=150)
 
     # --- LÓGICA DE VALIDACIÓN Y MÁSCARA ---
     def formatear_fecha(e):
+        # Filtra solo dígitos para aplicar la máscara
         v = "".join(filter(str.isdigit, e.control.value))
         
         # Validar Año (Rango 1982 - 2026)
@@ -27,104 +31,168 @@ def main(page: ft.Page):
         # Validar Día (Máximo 31)
         if len(v) >= 8:
             dia = int(v[6:8])
-            if dia > 31: v = v[:6] + "31"
-            elif dia == 0: v = v[:6] + "01"
+            if dia > 31: v = v[:6] + "31" + v[8:]
+            elif dia == 0: v = v[:6] + "01" + v[8:]
 
-        # Aplicar Formato AAAA-MM-DD
-        v = v[:8]
-        nuevo = ""
-        if len(v) > 0: nuevo = v[:4]
-        if len(v) > 4: nuevo += "-" + v[4:6]
-        if len(v) > 6: nuevo += "-" + v[6:8]
-            
-        if e.control.value != nuevo:
-            e.control.value = nuevo
-            e.control.update()
-
-    # --- CAMPOS DE LA INTERFAZ ---
-    txt_id = ft.Text(visible=False)
-    dd_plan = ft.Dropdown(label="Plan", expand=1)
-    dd_carrera = ft.Dropdown(label="Carrera", expand=2)
-    dd_materia = ft.Dropdown(label="Materia", expand=2)
-    
-    dd_semestre = ft.Dropdown(
-        label="Semestre", 
-        width=140,
-        options=[ft.dropdown.Option(str(i).zfill(2)) for i in range(1, 11)]
-    )
-    
-    txt_fecalt = ft.TextField(label="Fecha Alta", hint_text="AAAA-MM-DD", expand=1, on_change=formatear_fecha)
-    txt_fecbaj = ft.TextField(label="Fecha Baja", hint_text="AAAA-MM-DD", expand=1, on_change=formatear_fecha)
-
-    tabla = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("PLAN")),
-            ft.DataColumn(ft.Text("CARRERA")),
-            ft.DataColumn(ft.Text("MATERIA")),
-            ft.DataColumn(ft.Text("SEM.")),
-            ft.DataColumn(ft.Text("ALTA")),
-            ft.DataColumn(ft.Text("BAJA")),
-        ],
-    )
-
-    def refrescar():
-        res = db.obtener_catalogos()
-        dd_plan.options = [ft.dropdown.Option(p[0]) for p in res[0]]
-        dd_carrera.options = [ft.dropdown.Option(c[0], c[1]) for c in res[1]]
-        dd_materia.options = [ft.dropdown.Option(m[0], m[1]) for m in res[2]]
+        # Aplicar formato YYYY/MM/DD para consistencia con la BD
+        if len(v) > 4 and len(v) <= 6:
+            v = v[:4] + "/" + v[4:]
+        elif len(v) > 6:
+            v = v[:4] + "/" + v[4:6] + "/" + v[6:8]
         
-        tabla.rows.clear()
-        for r in db.leer_registros():
-            tabla.rows.append(ft.DataRow(
-                cells=[
-                    ft.DataCell(ft.Text(r[1])), ft.DataCell(ft.Text(r[2])), 
-                    ft.DataCell(ft.Text(r[3])), ft.DataCell(ft.Text(r[4])),
-                    ft.DataCell(ft.Text(r[5])), ft.DataCell(ft.Text(r[6] if r[6] else "-"))
-                ],
-                on_select_change=lambda e, rid=r[0]: cargar(rid)
-            ))
+        e.control.value = v
         page.update()
 
-    def cargar(rid):
-        d = db.obtener_por_id(rid)
+    # --- COMPONENTES ---
+    txt_id = ft.Text(visible=False)
+    dd_plan = ft.Dropdown(label="Plan", expand=1)
+    dd_carrera = ft.Dropdown(label="Carrera", expand=3)
+    dd_materia = ft.Dropdown(label="Materia", expand=True)
+    dd_semestre = ft.Dropdown(
+        label="Semestre",
+        options=[ft.dropdown.Option(f"{i:02d}") for i in range(1, 11)],
+        width=160
+    )
+
+    txt_fecalt = ft.TextField(label="Fecha Alta (YYYY/MM/DD)", on_change=formatear_fecha, expand=1)
+    txt_fecbaj = ft.TextField(label="Fecha Baja (YYYY/MM/DD)", on_change=formatear_fecha, expand=1)
+
+    # Agregamos una columna extra para el botón de acción
+    tabla = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("ID")),
+            ft.DataColumn(ft.Text("Plan")),
+            ft.DataColumn(ft.Text("Carrera")),
+            ft.DataColumn(ft.Text("Materia")),
+            ft.DataColumn(ft.Text("Sem.")),
+            ft.DataColumn(ft.Text("Alta")),
+            ft.DataColumn(ft.Text("Baja")),
+            ft.DataColumn(ft.Text("Acción")), 
+        ],
+        rows=[]
+    )
+
+    def cargar_catalogos():
+        # Carga inicial de datos maestros desde la base de datos
+        planes, carreras, materias = db.obtener_catalogos()
+        dd_plan.options = [ft.dropdown.Option(p[0]) for p in planes]
+        dd_carrera.options = [ft.dropdown.Option(c[0], c[1]) for c in carreras]
+        dd_materia.options = [ft.dropdown.Option(m[0], m[1]) for m in materias]
+        
+        # Llena la lista de Checkboxes para representar la tabla de prerrequisitos
+        lista_checks.controls.clear()
+        for m in materias:
+            lista_checks.controls.append(
+                ft.Checkbox(label=m[1], value=False, data=m[0])
+            )
+        page.update()
+
+    def refrescar():
+        # Actualiza la vista de la tabla con los registros actuales
+        registros = db.leer_registros()
+        nuevas_filas = []
+        for row in registros:
+            rid = row[0]
+            nuevas_filas.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(str(row[0]))),
+                        ft.DataCell(ft.Text(str(row[1]))),
+                        ft.DataCell(ft.Text(str(row[2]))),
+                        ft.DataCell(ft.Text(str(row[3]))),
+                        ft.DataCell(ft.Text(str(row[4]))),
+                        ft.DataCell(ft.Text(str(row[5]))),
+                        ft.DataCell(ft.Text(str(row[6]))),
+                        ft.DataCell(
+                            # Cambiamos IconButton por TextButton para evitar errores de iconos
+                            ft.TextButton(
+                                "Editar",
+                                on_click=lambda e, id_reg=rid: seleccionar_fila(id_reg)
+                            )
+                        ),
+                    ]
+                )
+            )
+        tabla.rows = nuevas_filas
+        page.update()
+
+    def seleccionar_fila(rid):
+        # Recupera los datos de la fila seleccionada para edición
+        registros_data = db.leer_registros()
+        d = [row for row in registros_data if row[0] == rid]
         if d:
-            txt_id.value = str(rid)
-            dd_plan.value, dd_carrera.value, dd_materia.value, dd_semestre.value, txt_fecalt.value, txt_fecbaj.value = d[0]
+            row = d[0]
+            txt_id.value = str(row[0])
+            dd_plan.value = row[1]
+            dd_semestre.value = row[4]
+            txt_fecalt.value = row[5]
+            txt_fecbaj.value = row[6]
+            
+            # Sincroniza los Checkboxes con los prerrequisitos guardados en la BD
+            reqs = db.obtener_requisitos_por_id(rid)
+            for check in lista_checks.controls:
+                check.value = True if check.data in reqs else False
+            
             page.update()
 
     def guardar(e):
+        # Recolecta los IDs de las materias marcadas en la lista de seriación
+        reqs_seleccionados = [
+            check.data for check in lista_checks.controls if check.value == True
+        ]
+        
+        # Ejecuta la operación de guardado (Insert o Update) incluyendo requisitos
         db.guardar_registro(
             dd_plan.value, dd_carrera.value, dd_materia.value, 
             dd_semestre.value, txt_fecalt.value, txt_fecbaj.value,
-            txt_id.value if txt_id.value else None
+            requisitos_ids=reqs_seleccionados,
+            rid=txt_id.value if txt_id.value else None
         )
         limpiar()
         refrescar()
 
     def limpiar(e=None):
+        # Restablece todos los campos del formulario
         txt_id.value = ""
         dd_plan.value = dd_carrera.value = dd_materia.value = dd_semestre.value = None
         txt_fecalt.value = txt_fecbaj.value = ""
+        for check in lista_checks.controls:
+            check.value = False
         page.update()
+
+    def eliminar(e):
+        # Elimina el registro seleccionado previa validación de ID
+        if txt_id.value:
+            db.eliminar_registro(txt_id.value)
+            limpiar()
+            refrescar()
 
     # --- DISEÑO ---
     page.add(
-        ft.Text("Administración de Planes de Estudio", size=24, weight="bold"),
+        ft.Text("Administración de Planes de Estudio - Reingeniería", size=24, weight="bold"),
         ft.Column([
             ft.Row([dd_plan, dd_carrera, dd_semestre]),
             ft.Row([dd_materia, txt_fecalt, txt_fecbaj]),
+            # Nueva sección visual para la gestión de Prerrequisitos
+            ft.Text("Seleccionar Prerrequisitos (Seriación):", weight="bold"),
+            ft.Container(
+                content=lista_checks, 
+                border=ft.border.all(1, ft.Colors.OUTLINE), 
+                padding=10, 
+                border_radius=5
+            ),
             ft.Row([
-                ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=guardar),
-                ft.FilledButton("Eliminar", icon=ft.Icons.DELETE, 
-                                on_click=lambda _: (db.eliminar_registro(txt_id.value), limpiar(), refrescar()), 
-                                bgcolor="red700"),
-                ft.TextButton("Limpiar", on_click=limpiar)
-            ])
-        ], spacing=20),
-        ft.Divider(),
-        tabla
+                ft.FilledButton("Guardar", icon="save", on_click=guardar),
+                ft.ElevatedButton("Limpiar", icon="cleaning_services", on_click=limpiar),
+                ft.TextButton("Eliminar", icon="delete", icon_color="red", on_click=eliminar)
+            ]),
+            ft.Divider(),
+            # Tabla de registros con scroll para manejar grandes volúmenes de datos
+            ft.Column([tabla], scroll=ft.ScrollMode.ALWAYS, height=300)
+        ])
     )
+
+    cargar_catalogos()
     refrescar()
 
-if __name__ == "__main__":
-    ft.run(main)
+ft.app(target=main)

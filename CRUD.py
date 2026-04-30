@@ -30,17 +30,30 @@ class DatabaseManager:
         """
         return self._ejecutar_query(query, fetch=True)
 
-    def guardar_registro(self, plan, carrera, materia, semestre, falt, fbaj, rid=None):
+    def guardar_registro(self, plan, carrera, materia, semestre, falt, fbaj, requisitos_ids=None, rid=None):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
         if rid:
             query = "UPDATE estructura_plan SET clave_plan=?, carrera_id=?, materia_id=?, semestre=?, fecalt=?, fecbaj=? WHERE id_registro=?"
-            params = (plan, carrera, materia, semestre, falt, fbaj, rid)
+            cursor.execute(query, (plan, carrera, materia, semestre, falt, fbaj, rid))
+            cursor.execute("DELETE FROM prerrequisitos WHERE id_registro_plan = ?", (rid,))
+            id_plan = rid
         else:
-            query = "INSERT INTO estructura_plan (clave_plan, carrera_id, materia_id, semestre, fecalt, fecbaj) VALUES (?,?,?,?,?,?)"
-            params = (plan, carrera, materia, semestre, falt, fbaj)
-        self._ejecutar_query(query, params)
+            query = "INSERT INTO estructura_plan (clave_plan, carrera_id, materia_id, semestre, fecalt, fbaj) VALUES (?,?,?,?,?,?)"
+            cursor.execute(query, (plan, carrera, materia, semestre, falt, fbaj))
+            id_plan = cursor.lastrowid
+
+        if requisitos_ids:
+            for req_id in requisitos_ids:
+                cursor.execute("INSERT INTO prerrequisitos (id_registro_plan, materia_req_id) VALUES (?,?)", (id_plan, req_id))
+        
+        conn.commit()
+        conn.close()
 
     def eliminar_registro(self, rid):
         if rid:
+            self._ejecutar_query("DELETE FROM prerrequisitos WHERE id_registro_plan = ?", (rid,))
             self._ejecutar_query("DELETE FROM estructura_plan WHERE id_registro = ?", (rid,))
 
     def obtener_por_id(self, rid):
@@ -48,3 +61,8 @@ class DatabaseManager:
             "SELECT clave_plan, carrera_id, materia_id, semestre, fecalt, fecbaj FROM estructura_plan WHERE id_registro=?", 
             (rid,), fetch=True
         )
+
+    def obtener_requisitos_por_id(self, rid):
+        query = "SELECT materia_req_id FROM prerrequisitos WHERE id_registro_plan = ?"
+        res = self._ejecutar_query(query, (rid,), fetch=True)
+        return [r[0] for r in res] if res else []
