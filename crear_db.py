@@ -46,11 +46,10 @@ def ejecutar_reingenieria():
         ('101', 'ALGEBRA SUPERIOR'), ('102', 'MATEMATICAS I'),
         ('140', 'INTRODUCCION A LA COMPUTACION'), ('201', 'MATEMATICAS II')])
 
-    cursor.execute("INSERT INTO versiones_plan VALUES (?,?)", ('A', 'Plan de Estudios 1991'))
+    cursor.executemany("INSERT INTO versiones_plan VALUES (?,?)", [('A', 'Plan de Estudios 1991'), ('B', 'Plan de Estudios 2016')])
 
     conn.commit()
     conn.close()
-    print("¡Base de datos recreada exitosamente con la columna fecbaj!")
 
 if __name__ == "__main__":
     ejecutar_reingenieria()

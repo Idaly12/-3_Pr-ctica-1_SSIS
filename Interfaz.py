@@ -43,11 +43,23 @@ def main(page: ft.Page):
         e.control.value = v
         page.update()
 
+    def actualizar_prerrequisitos(e=None):
+        # Desactiva la opción en los prerrequisitos que coincida con la materia seleccionada
+        materia_seleccionada = dd_materia.value
+        for check in lista_checks.controls:
+            if materia_seleccionada and check.data == materia_seleccionada:
+                check.disabled = True
+                check.value = False
+            else:
+                check.disabled = False
+        page.update()
+
     # --- COMPONENTES ---
     txt_id = ft.Text(visible=False)
     dd_plan = ft.Dropdown(label="Plan", expand=1)
     dd_carrera = ft.Dropdown(label="Carrera", expand=3)
-    dd_materia = ft.Dropdown(label="Materia", expand=True)
+    # Se actualiza la propiedad a on_select para las versiones recientes de Flet
+    dd_materia = ft.Dropdown(label="Materia", expand=True, on_select=actualizar_prerrequisitos)
     dd_semestre = ft.Dropdown(
         label="Semestre",
         options=[ft.dropdown.Option(f"{i:02d}") for i in range(1, 11)],
@@ -57,7 +69,6 @@ def main(page: ft.Page):
     txt_fecalt = ft.TextField(label="Fecha Alta (YYYY/MM/DD)", on_change=formatear_fecha, expand=1)
     txt_fecbaj = ft.TextField(label="Fecha Baja (YYYY/MM/DD)", on_change=formatear_fecha, expand=1)
 
-    # Agregamos una columna extra para el botón de acción
     tabla = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("ID")),
@@ -75,7 +86,7 @@ def main(page: ft.Page):
     def cargar_catalogos():
         # Carga inicial de datos maestros desde la base de datos
         planes, carreras, materias = db.obtener_catalogos()
-        dd_plan.options = [ft.dropdown.Option(p[0]) for p in planes]
+        dd_plan.options = [ft.dropdown.Option(p[0], p[1]) for p in planes]
         dd_carrera.options = [ft.dropdown.Option(c[0], c[1]) for c in carreras]
         dd_materia.options = [ft.dropdown.Option(m[0], m[1]) for m in materias]
         
@@ -104,7 +115,6 @@ def main(page: ft.Page):
                         ft.DataCell(ft.Text(str(row[5]))),
                         ft.DataCell(ft.Text(str(row[6]))),
                         ft.DataCell(
-                            # Cambiamos IconButton por TextButton para evitar errores de iconos
                             ft.TextButton(
                                 "Editar",
                                 on_click=lambda e, id_reg=rid: seleccionar_fila(id_reg)
@@ -117,23 +127,25 @@ def main(page: ft.Page):
         page.update()
 
     def seleccionar_fila(rid):
-        # Recupera los datos de la fila seleccionada para edición
-        registros_data = db.leer_registros()
-        d = [row for row in registros_data if row[0] == rid]
-        if d:
-            row = d[0]
-            txt_id.value = str(row[0])
-            dd_plan.value = row[1]
-            dd_semestre.value = row[4]
-            txt_fecalt.value = row[5]
-            txt_fecbaj.value = row[6]
+        # Se obtiene el registro exacto por ID para recuperar las claves correctas de los dropdowns
+        datos_registro = db.obtener_por_id(rid)
+        if datos_registro:
+            row = datos_registro[0]
+            txt_id.value = str(rid)
+            dd_plan.value = row[0]
+            dd_carrera.value = row[1]
+            dd_materia.value = row[2]
+            dd_semestre.value = row[3]
+            txt_fecalt.value = row[4]
+            txt_fecbaj.value = row[5]
             
             # Sincroniza los Checkboxes con los prerrequisitos guardados en la BD
             reqs = db.obtener_requisitos_por_id(rid)
             for check in lista_checks.controls:
                 check.value = True if check.data in reqs else False
             
-            page.update()
+            # Valida las restricciones de materia en los prerrequisitos
+            actualizar_prerrequisitos()
 
     def guardar(e):
         # Recolecta los IDs de las materias marcadas en la lista de seriación
@@ -158,7 +170,8 @@ def main(page: ft.Page):
         txt_fecalt.value = txt_fecbaj.value = ""
         for check in lista_checks.controls:
             check.value = False
-        page.update()
+        # Restablece el estado de los componentes bloqueados
+        actualizar_prerrequisitos()
 
     def eliminar(e):
         # Elimina el registro seleccionado previa validación de ID
@@ -173,7 +186,6 @@ def main(page: ft.Page):
         ft.Column([
             ft.Row([dd_plan, dd_carrera, dd_semestre]),
             ft.Row([dd_materia, txt_fecalt, txt_fecbaj]),
-            # Nueva sección visual para la gestión de Prerrequisitos
             ft.Text("Seleccionar Prerrequisitos (Seriación):", weight="bold"),
             ft.Container(
                 content=lista_checks, 
@@ -187,7 +199,6 @@ def main(page: ft.Page):
                 ft.TextButton("Eliminar", icon="delete", icon_color="red", on_click=eliminar)
             ]),
             ft.Divider(),
-            # Tabla de registros con scroll para manejar grandes volúmenes de datos
             ft.Column([tabla], scroll=ft.ScrollMode.ALWAYS, height=300)
         ])
     )
